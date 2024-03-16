@@ -1,0 +1,141 @@
+/* Q1.
+We want to understand more about the movies that families are watching. The following categories are considered family movies: Animation, Children, Classics, Comedy, Family and Music.
+
+Create a query that lists each movie, the film category it is classified in, and the number of times it has been rented out.
+*/
+
+SELECT film_title, category_name,
+   COUNT(rental_id) AS rental_count
+FROM (
+  SELECT f.title AS film_title,
+            c.name AS category_name,
+            r.rental_id
+       FROM film f
+       JOIN film_category AS fc ON f.film_id = fc.film_id
+       JOIN category c ON c.category_id = fc.category_id
+       JOIN inventory i ON f.film_id = i.film_id
+       JOIN rental r ON i.inventory_id = r.inventory_id
+) AS t1
+
+   WHERE category_name 
+      IN ('Animation', 'Children', 'Classics', 'Comedy', 'Family', 'Music')
+GROUP BY 1, 2
+ORDER BY 2, 1;
+
+-----------------------------------------------------------------------------------------------
+
+
+/* Q2.
+What city had the highest number of monthly movie rentals?
+
+We will do this by writing a query that lists :
+- The month
+- The city with the max movie rentals  
+- The number rentals
+
+*/
+
+WITH rentals_per_month AS (
+    SELECT 
+        DATE_TRUNC('month', r.rental_date) AS rental_month, i.store_id,
+        COUNT(*) AS num_rentals
+    FROM rental r
+    JOIN inventory i USING (inventory_id)
+    WHERE EXTRACT(YEAR FROM r.rental_date) = 2005
+    GROUP BY 1,2
+),
+most_rented_per_month AS (
+    SELECT
+        rental_month,
+        store_id,
+        num_rentals,
+        ROW_NUMBER() OVER (PARTITION BY rental_month ORDER BY num_rentals DESC) AS row_num
+    FROM rentals_per_month
+)
+SELECT 
+    m.rental_month,
+    c.city AS city_with_most_rentals,
+    m.num_rentals
+FROM most_rented_per_month m
+    JOIN store s USING (store_id)
+	JOIN address a USING (address_id)
+    JOIN city c USING (city_id) 
+WHERE m.row_num = 1
+ORDER BY m.rental_month;
+
+-----------------------------------------------------------------------------------------------
+
+
+/* Q3.
+We want to find out how the two stores compare in their count of rental orders
+during every month for all the years we have data for.
+Write a query that returns the store ID for the store,
+the year and month and the number of rental orders each store has fulfilled
+for that month. Your table should include a column for each of the following:
+year, month, store ID and count of rental orders fulfilled during that month.
+*/
+
+ WITH most_rented_per_month AS (
+    SELECT 
+        EXTRACT(MONTH FROM r.rental_date) AS Rental_month,
+        EXTRACT(YEAR FROM r.rental_date) AS Rental_year,
+        s.store_id AS Store_ID,
+        COUNT(*) AS Count_Rentals
+    FROM rental r
+        JOIN inventory i ON r.inventory_id = i.inventory_id
+        JOIN store s ON i.store_id = s.store_id
+    GROUP BY 1, 2, 3
+)
+SELECT 
+    Rental_month, Rental_year, Store_ID, Count_Rentals
+FROM most_rented_per_month m
+    JOIN store s USING (Store_ID)
+    JOIN address a USING (address_id)
+    JOIN city c USING (city_id) 
+ORDER BY 4 DESC;
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ORRR ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+SELECT 
+    EXTRACT (MONTH FROM r.rental_date) AS Rental_month,
+    EXTRACT(YEAR FROM r.rental_date) AS Rental_year,
+    s.store_id as Store_ID,
+    COUNT(*) AS Count_rentals
+	
+FROM rental r
+JOIN inventory i ON r.inventory_id = i.inventory_id
+JOIN store s ON i.store_id = s.store_id
+GROUP BY 1, 2, 3
+ORDER BY Count_rentals DESC;
+
+-----------------------------------------------------------------------------------------------
+
+ /* Q4
+ We would like to know who were our top 10 paying customers,
+ how many payments they made on a monthly basis during 2007,
+ and what was the amount of the monthly payments.
+ Can you write a query to capture the customer name,
+ month and year of payment, and total payment amount for each month
+ by these top 10 paying customers?
+ */
+
+WITH top_paying_customers AS (
+  SELECT C.customer_id, SUM(p.amount) AS total_payment
+FROM customer c
+JOIN payment p USING (customer_id)
+GROUP BY 1
+ORDER BY 2 DESC
+LIMIT 10 	
+)
+
+SELECT DATE_TRUNC('month', p.payment_date) AS payment_month,
+	   CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+	   COUNT(p.payment_id) AS num_payments,
+	   SUM(p.amount) AS total_payment
+FROM customer c
+JOIN payment p USING (customer_id)
+JOIN top_paying_customers USING (customer_id)
+GROUP BY 2, 1
+ORDER BY 2, 1
+
